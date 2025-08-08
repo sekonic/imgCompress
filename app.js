@@ -6,6 +6,7 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+app.use(express.json());
 app.set('trust proxy', 1);
 app.use(cors({ origin: '*' }));
 
@@ -14,6 +15,134 @@ const MAX_DIMENSION = 600;
 
 app.get('/curucucha', (req, res) => {
   res.status(200).json({ message: 'Despiértate y anda' });
+});
+
+app.post('/compress-image-batch', async (req, res) => {
+  const data = req.body;
+  let quality = parseInt(data.quality || '80');
+  let urlsArray = data.arr;
+  let dataToResponse = [];
+
+  for (let url of urlsArray) {
+    try {
+      console.log(`Processing: ${url} (Calidad: ${quality})`);
+
+      const response = await axios({
+        url: url,
+        responseType: 'arraybuffer',
+        timeout: 10000, // 10 segundos de timeout para la descarga
+      });
+      const originalImageBuffer = Buffer.from(response.data);
+      let processedImageBuffer;
+      let contentType =
+        response.headers['content-type'] || 'application/octet-stream';
+
+      const metadata = await sharp(originalImageBuffer).metadata();
+      const { width, height, format } = metadata;
+
+      if (format === 'gif' && metadata.pages > 1) {
+        console.log(
+          `[Processing GIF] ${url}. Solo redimensionará si es necesario.`
+        );
+        if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+          let resizeOptions = {};
+          if (width > height) {
+            resizeOptions.width = MAX_DIMENSION;
+          } else {
+            resizeOptions.height = MAX_DIMENSION;
+          }
+          processedImageBuffer = await sharp(originalImageBuffer)
+            .resize(resizeOptions)
+            .gif()
+            .toBuffer();
+          console.log(
+            `[Processing GIF] GIF animado redimensionado a ${
+              resizeOptions.width || 'auto'
+            }x${resizeOptions.height || 'auto'}.`
+          );
+        } else {
+          processedImageBuffer = originalImageBuffer;
+          console.log(
+            `[Processing GIF] GIF animado no necesita redimensionamiento.`
+          );
+        }
+        contentType = 'image/gif';
+      } else {
+        let transformer = sharp(originalImageBuffer);
+
+        if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+          let resizeOptions = {};
+          if (width > height) {
+            resizeOptions.width = MAX_DIMENSION;
+          } else {
+            resizeOptions.height = MAX_DIMENSION;
+          }
+          transformer = transformer.resize(resizeOptions);
+          console.log(
+            `[Processing] Imagen redimensionada a ${
+              resizeOptions.width || 'auto'
+            }x${resizeOptions.height || 'auto'}.`
+          );
+        }
+
+        const urlLower = url.toLowerCase();
+        if (urlLower.endsWith('.png') || contentType.includes('image/png')) {
+          processedImageBuffer = await transformer
+            .webp({ quality: quality })
+            .toBuffer();
+          contentType = 'image/webp';
+        } else if (
+          urlLower.endsWith('.jpg') ||
+          urlLower.endsWith('.jpeg') ||
+          contentType.includes('image/jpeg')
+        ) {
+          processedImageBuffer = await transformer
+            .jpeg({ quality: quality, progressive: true })
+            .toBuffer();
+          contentType = 'image/jpeg';
+        } else if (
+          urlLower.endsWith('.gif') ||
+          contentType.includes('image/gif')
+        ) {
+          processedImageBuffer = await transformer
+            .webp({ quality: quality })
+            .toBuffer();
+          contentType = 'image/webp';
+        } else if (
+          urlLower.endsWith('.webp') ||
+          contentType.includes('image/webp')
+        ) {
+          processedImageBuffer = await transformer
+            .webp({ quality: quality })
+            .toBuffer();
+          contentType = 'image/webp';
+        } else if (
+          urlLower.endsWith('.svg') ||
+          contentType.includes('image/svg')
+        ) {
+          processedImageBuffer = originalImageBuffer;
+          contentType = 'image/svg+xml';
+        } else {
+          console.warn(
+            `[Warning] Formato de imagen no soportado para compresión/redimensionamiento: ${url}. Devolviendo original.`
+          );
+        }
+      }
+      let obj = {
+        base64URL: `data:${contentType};base64,${processedImageBuffer.toString(
+          'base64'
+        )}`,
+        url: url,
+      };
+      dataToResponse.push(obj);
+    } catch (error) {
+      console.error(
+        `[Error Processing] Error al procesar imagen ${url}:`,
+        error.message
+      );
+    }
+  }
+  res.status(200).json(dataToResponse);
 });
 
 app.get('/compress-image', async (req, res) => {
