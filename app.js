@@ -40,7 +40,7 @@ app.post('/compress-image-batch', async (req, res) => {
       const metadata = await sharp(originalImageBuffer).metadata();
       const { width, height, format } = metadata;
 
-      if (format === 'gif' && metadata.pages > 1) {
+      if (format === 'gif') {
         console.log(
           `[Processing GIF] ${url}. Solo redimensionará si es necesario.`
         );
@@ -208,7 +208,7 @@ app.get('/compress-image', async (req, res) => {
     const metadata = await sharp(originalImageBuffer).metadata();
     const { width, height, format } = metadata;
 
-    if (format === 'gif' && metadata.pages > 1) {
+    if (format === 'gif') {
       console.log(
         `[Processing GIF] GIF animado detectado para: ${imageUrl}. Solo redimensionará si es necesario.`
       );
