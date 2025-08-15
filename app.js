@@ -101,14 +101,6 @@ app.post('/compress-image-batch', async (req, res) => {
             .toBuffer();
           contentType = 'image/jpeg';
         } else if (
-          urlLower.endsWith('.gif') ||
-          contentType.includes('image/gif')
-        ) {
-          processedImageBuffer = await transformer
-            .webp({ quality: quality })
-            .toBuffer();
-          contentType = 'image/webp';
-        } else if (
           urlLower.endsWith('.webp') ||
           contentType.includes('image/webp')
         ) {
@@ -147,59 +139,19 @@ app.post('/compress-image-batch', async (req, res) => {
 
 app.get('/compress-image', async (req, res) => {
   const imageUrl = req.query.url;
-  // Leer la calidad, por defecto 80
   let quality = parseInt(req.query.quality || '80');
-
-  if (!imageUrl) {
-    console.error('[Error] URL de imagen no proporcionada.');
-    return res.status(400).send('URL de imagen no proporcionada.');
-  }
-
-  // Validación básica de la URL
-  try {
-    new URL(imageUrl);
-  } catch (e) {
-    console.error(`[Error] URL inválida: ${imageUrl}`, e.message);
-    return res.status(400).send('URL de imagen inválida.');
-  }
-
-  // Asegurar que la calidad esté en un rango válido
-  if (quality < 1 || quality > 100) {
-    console.warn(
-      `[Warning] Calidad fuera de rango (${quality}) para ${imageUrl}. Usando 80.`
-    );
-    quality = 80;
-  }
 
   try {
     console.log(
-      `[Processing] Descargando y procesando: ${imageUrl} (Calidad: ${quality})`
+      `Descargando y procesando: ${imageUrl} (Calidad: ${quality})`
     );
 
     const response = await axios({
       url: imageUrl,
       responseType: 'arraybuffer',
-      timeout: 10000, // 10 segundos de timeout para la descarga
+      timeout: 10000,
     });
     const originalImageBuffer = Buffer.from(response.data);
-
-    const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
-    if (originalImageBuffer.length > MAX_IMAGE_SIZE_BYTES) {
-      console.warn(
-        `[Warning] Imagen demasiado grande (${(
-          originalImageBuffer.length /
-          (1024 * 1024)
-        ).toFixed(2)}MB) para ${imageUrl}. Devolviendo original.`
-      );
-      res.set(
-        'Content-Type',
-        response.headers['content-type'] || 'application/octet-stream'
-      );
-      res.set('Cache-Control', 'no-cache, no-store, must-revalidate'); // No cachear en el cliente tampoco
-      res.set('Pragma', 'no-cache');
-      res.set('Expires', '0');
-      return res.send(originalImageBuffer); // Devolver la original sin procesar
-    }
 
     let processedImageBuffer;
     let contentType =
@@ -209,30 +161,18 @@ app.get('/compress-image', async (req, res) => {
     const { width, height, format } = metadata;
 
     if (format === 'gif') {
-      console.log(
-        `[Processing GIF] GIF animado detectado para: ${imageUrl}. Solo redimensionará si es necesario.`
-      );
       if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
         let resizeOptions = {};
-        if (width > height) {
-          resizeOptions.width = MAX_DIMENSION;
-        } else {
-          resizeOptions.height = MAX_DIMENSION;
-        }
+        width > height
+          ? (resizeOptions.width = MAX_DIMENSION)
+          : (resizeOptions.height = MAX_DIMENSION);
+
         processedImageBuffer = await sharp(originalImageBuffer)
           .resize(resizeOptions)
           .gif()
           .toBuffer();
-        console.log(
-          `[Processing GIF] GIF animado redimensionado a ${
-            resizeOptions.width || 'auto'
-          }x${resizeOptions.height || 'auto'}.`
-        );
       } else {
         processedImageBuffer = originalImageBuffer;
-        console.log(
-          `[Processing GIF] GIF animado no necesita redimensionamiento.`
-        );
       }
       contentType = 'image/gif';
     } else {
@@ -240,17 +180,10 @@ app.get('/compress-image', async (req, res) => {
 
       if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
         let resizeOptions = {};
-        if (width > height) {
-          resizeOptions.width = MAX_DIMENSION;
-        } else {
-          resizeOptions.height = MAX_DIMENSION;
-        }
+        width > height
+          ? (resizeOptions.width = MAX_DIMENSION)
+          : (resizeOptions.height = MAX_DIMENSION);
         transformer = transformer.resize(resizeOptions);
-        console.log(
-          `[Processing] Imagen redimensionada a ${
-            resizeOptions.width || 'auto'
-          }x${resizeOptions.height || 'auto'}.`
-        );
       }
 
       const urlLower = imageUrl.toLowerCase();
@@ -268,14 +201,6 @@ app.get('/compress-image', async (req, res) => {
           .jpeg({ quality: quality, progressive: true })
           .toBuffer();
         contentType = 'image/jpeg';
-      } else if (
-        urlLower.endsWith('.gif') ||
-        contentType.includes('image/gif')
-      ) {
-        processedImageBuffer = await transformer
-          .webp({ quality: quality })
-          .toBuffer();
-        contentType = 'image/webp';
       } else if (
         urlLower.endsWith('.webp') ||
         contentType.includes('image/webp')
