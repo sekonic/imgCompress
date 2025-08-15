@@ -14,7 +14,7 @@ app.use(cors({ origin: '*' }));
 const MAX_DIMENSION = 600;
 
 app.get('/curucucha', (req, res) => {
-  res.status(200).json({ message: 'Despiértate y anda' });
+  res.status(200).json({ message: 'Despiértate y comprime' });
 });
 
 app.post('/compress-image-batch', async (req, res) => {
